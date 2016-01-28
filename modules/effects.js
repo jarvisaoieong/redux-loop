@@ -9,6 +9,7 @@ const effectTypes = {
   NONE: 'NONE',
 };
 
+const pureMap = (a) => a;
 
 /**
 * Runs an effect and returns the Promise for its completion.
@@ -23,13 +24,15 @@ export function effectToPromise(effect) {
     );
   }
 
+  const mapFn = effect.map || pureMap;
+
   switch (effect.type) {
     case effectTypes.PROMISE:
-      return effect.factory(...effect.args);
+      return Promise.resolve(effect.factory(...effect.args)).then(mapFn);
     case effectTypes.BATCH:
       return Promise.all(effect.effects.map(effectToPromise)).then(flatten);
     case effectTypes.CONSTANT:
-      return Promise.resolve(effect.action);
+      return Promise.resolve(effect.action).then(mapFn);
     case effectTypes.NONE:
       return Promise.resolve();
   }
@@ -89,4 +92,26 @@ export function constant(action) {
     type: effectTypes.CONSTANT,
     [isEffectSymbol]: true
   };
+}
+
+export function map(effect, mapFn) {
+  switch (effect.type) {
+    case effectTypes.PROMISE:
+      return {
+        ...effect,
+        map: mapFn,
+      }
+    case effectTypes.BATCH:
+      return {
+        ...effect,
+        effects: effect.effects.map((e) => map(e, mapFn)),
+      }
+    case effectTypes.CONSTANT:
+      return {
+        ...effect,
+        map: mapFn,
+      }
+    case effectTypes.NONE:
+      return effect;
+  }
 }
