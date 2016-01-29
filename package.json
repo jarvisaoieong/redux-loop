@@ -1,5 +1,5 @@
 {
-  "name": "redux-loop",
+  "name": "@jarvisaoieong/redux-loop",
   "npmName": "redux-loop",
   "version": "1.0.3",
   "description": "Sequence your effects naturally and purely by returning them from your reducers.",
