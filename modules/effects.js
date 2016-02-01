@@ -22,13 +22,19 @@ export function effectToPromise(effect) {
     );
   }
 
+  const effectMaps = effect.maps || [];
+
   switch (effect.type) {
     case effectTypes.PROMISE:
-      return Promise.resolve(effect.factory(...effect.args));
+      return effectMaps.reduce((promise, mapFns) => {
+        return promise.then(...mapFns);
+      }, Promise.resolve(effect.factory(...effect.args)));
     case effectTypes.BATCH:
       return Promise.all(effect.effects.map(effectToPromise)).then(flatten);
     case effectTypes.CONSTANT:
-      return Promise.resolve(effect.action);
+      return effectMaps.reduce((promise, mapFns) => {
+        return promise.then(...mapFns);
+      }, Promise.resolve(effect.action));
     case effectTypes.NONE:
       return Promise.resolve();
   }
@@ -90,26 +96,30 @@ export function constant(action) {
   };
 }
 
-export function map(effect, mapFn) {
+export function map(effect, ...mapFns) {
+  const effectMaps = effect.maps || [];
+
   switch (effect.type) {
     case effectTypes.PROMISE:
       return {
         ...effect,
-        factory: (...args) => {
-          return Promise.resolve()
-            .then(() => effect.factory(...args))
-            .then(mapFn);
-        },
+        maps: [
+          ...effectMaps,
+          mapFns,
+        ],
       }
     case effectTypes.BATCH:
       return {
         ...effect,
-        effects: effect.effects.map((e) => map(e, mapFn)),
+        effects: effect.effects.map((e) => map(e, mapFns)),
       }
     case effectTypes.CONSTANT:
       return {
         ...effect,
-        action: mapFn(action),
+        maps: [
+          ...effectMaps,
+          mapFns,
+        ],
       }
     case effectTypes.NONE:
       return effect;
