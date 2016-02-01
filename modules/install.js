@@ -12,6 +12,8 @@ import {
   effectToPromise,
 } from './effects';
 
+import createLogger from './createLogger';
+
 /**
  * Lifts a state to a looped state if it is not already.
  */
@@ -35,26 +37,35 @@ function liftReducer(reducer) {
  * Installs a new dispatch function which will attempt to execute any effects
  * attached to the current model as established by the original dispatch.
  */
-export function install() {
+export function install({logger} = {}) {
   return (next) => (reducer, initialState) => {
     const liftedInitialState = liftState(initialState);
     const store = next(liftReducer(reducer), liftedInitialState);
 
-    function dispatch(action) {
-      const dispatchedAction = store.dispatch(action);
-      const { effect } = store.getState();
-      return runEffect(action, effect).then(() => {});
+    let __dispatch;
+
+    if (logger) {
+      __dispatch = createLogger(logger)(store)(store.dispatch);
+    } else {
+      __dispatch = store.dispatch;
     }
 
-    function runEffect(originalAction, effect) {
+    function dispatch(action, originalActions = []) {
+      __dispatch(action, originalActions);
+      const { effect } = store.getState();
+      return runEffect(effect, originalActions.concat(action)).then(() => {});
+    }
+
+    function runEffect(effect, originalActions = []) {
       return effectToPromise(effect)
         .then((actions) => {
           const materializedActions = [].concat(actions).filter(a => a);
-          return Promise.all(materializedActions.map(dispatch));
+          return Promise.all(materializedActions.map((action) => dispatch(action, originalActions)));
         })
         .catch((error) => {
+          const originalActionTypes = originalActions.map((action) => action.type).join(' > ');
           console.error(
-            `loop Promise caught when returned from action of type ${originalAction.type}.` +
+            `loop Promise caught when returned from action of type "${originalActionTypes}".` +
             '\nloop Promises must not throw!'
           );
           throw error;
@@ -69,7 +80,7 @@ export function install() {
       return store.replaceReducer(liftReducer(r));
     }
 
-    runEffect({ type: "@@ReduxLoop/INIT" }, liftedInitialState.effect);
+    runEffect(liftedInitialState.effect, [{ type: "@@ReduxLoop/INIT" }]);
 
     return {
       ...store,
