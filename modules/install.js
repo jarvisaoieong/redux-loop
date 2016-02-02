@@ -40,21 +40,22 @@ export function install() {
     const liftedInitialState = liftState(initialState);
     const store = next(liftReducer(reducer), liftedInitialState);
 
-    function dispatch(action) {
-      const dispatchedAction = store.dispatch(action);
+    function dispatch(action, originalActions = []) {
+      store.dispatch(action, originalActions);
       const { effect } = store.getState();
-      return runEffect(action, effect).then(() => {});
+      return runEffect(effect, originalActions.concat(action)).then(() => {});
     }
 
-    function runEffect(originalAction, effect) {
+    function runEffect(effect, originalActions = []) {
       return effectToPromise(effect)
         .then((actions) => {
           const materializedActions = [].concat(actions).filter(a => a);
-          return Promise.all(materializedActions.map(dispatch));
+          return Promise.all(materializedActions.map((action) => dispatch(action, originalActions)));
         })
         .catch((error) => {
+          const originalActionTypes = originalActions.map((action) => action.type);
           console.error(
-            `loop Promise caught when returned from action of type ${originalAction.type}.` +
+            `loop Promise caught when returned from action of type ${originalActionTypes.join(' > ')}.` +
             '\nloop Promises must not throw!'
           );
           throw error;
@@ -69,7 +70,7 @@ export function install() {
       return store.replaceReducer(liftReducer(r));
     }
 
-    runEffect({ type: "@@ReduxLoop/INIT" }, liftedInitialState.effect);
+    runEffect(liftedInitialState.effect, [{ type: "@@ReduxLoop/INIT" }]);
 
     return {
       ...store,
