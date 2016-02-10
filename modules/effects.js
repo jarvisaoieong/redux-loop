@@ -7,6 +7,7 @@ const effectTypes = {
   BATCH: 'BATCH',
   CONSTANT: 'CONSTANT',
   NONE: 'NONE',
+  MAP: 'MAP',
 };
 
 /**
@@ -22,21 +23,21 @@ export function effectToPromise(effect) {
     );
   }
 
-  const effectMaps = effect.maps || [];
-
   switch (effect.type) {
     case effectTypes.PROMISE:
-      return effectMaps.reduce((promise, mapFns) => {
-        return promise.then(...mapFns);
-      }, Promise.resolve(effect.factory(...effect.args)));
+      return Promise.resolve(effect.factory(...effect.args));
     case effectTypes.BATCH:
       return Promise.all(effect.effects.map(effectToPromise)).then(flatten);
     case effectTypes.CONSTANT:
-      return effectMaps.reduce((promise, mapFns) => {
-        return promise.then(...mapFns);
-      }, Promise.resolve(effect.action));
+      return Promise.resolve(effect.action);
     case effectTypes.NONE:
       return Promise.resolve();
+    case effectTypes.MAP:
+      return effectToPromise(effect.effect).then((action) => 
+        action
+          ? effect.factory(...effect.args, action)
+          : Promise.resolve()
+      );
   }
 }
 
@@ -96,32 +97,15 @@ export function constant(action) {
   };
 }
 
-export function map(effect, ...mapFns) {
-  const effectMaps = effect.maps || [];
-
-  switch (effect.type) {
-    case effectTypes.PROMISE:
-      return {
-        ...effect,
-        maps: [
-          ...effectMaps,
-          mapFns,
-        ],
-      }
-    case effectTypes.BATCH:
-      return {
-        ...effect,
-        effects: effect.effects.map((e) => map(e, mapFns)),
-      }
-    case effectTypes.CONSTANT:
-      return {
-        ...effect,
-        maps: [
-          ...effectMaps,
-          mapFns,
-        ],
-      }
-    case effectTypes.NONE:
-      return effect;
-  }
+/**
+ * Transform the return type of a bunch of `Effects`. This is primarily useful for adding tags to route `Actions` to the right place
+ */
+export function map(effect, factory, ...args) {
+  return {
+    effect,
+    factory,
+    args,
+    type: effectTypes.MAP,
+    [isEffectSymbol]: true
+  };
 }
