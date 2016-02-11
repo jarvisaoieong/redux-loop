@@ -27,7 +27,13 @@ export function effectToPromise(effect) {
     case effectTypes.PROMISE:
       return Promise.resolve(effect.factory(...effect.args));
     case effectTypes.BATCH:
-      return Promise.all(effect.effects.map(effectToPromise)).then(flatten);
+      return Promise.all(effect.effects.map(effectToPromise))
+        .then((actions) => 
+          effect.effect
+            ? effectToPromise(effect.effect).then((action) => [...actions, action])
+            : actions
+        ) 
+        .then(flatten);
     case effectTypes.CONSTANT:
       return Promise.resolve(effect.action);
     case effectTypes.NONE:
@@ -80,9 +86,10 @@ export function promise(factory, ...args) {
 /**
  * Composes an array of effects together.
  */
-export function batch(effects) {
+export function batch(effects, effect) {
   return {
     effects,
+    effect,
     type: effectTypes.BATCH,
     [isEffectSymbol]: true
   };
