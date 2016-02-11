@@ -35,7 +35,9 @@ export function effectToPromise(effect) {
     case effectTypes.MAP:
       return effectToPromise(effect.effect).then((action) => 
         action
-          ? effect.factory(...effect.args, action)
+          ? Array.isArray(action)
+            ? action.map((a) => effect.factory(...effect.args, a))
+            : effect.factory(...effect.args, action)
           : Promise.resolve()
       );
   }
