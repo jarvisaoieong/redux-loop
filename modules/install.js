@@ -40,17 +40,20 @@ export function install() {
     const liftedInitialState = liftState(initialState);
     const store = next(liftReducer(reducer), liftedInitialState);
 
-    function dispatch(action, originalActions = []) {
+    function dispatch(action, finalAction, originalActions = []) {
       store.dispatch(action, originalActions);
       const { effect } = store.getState();
-      return runEffect(effect, originalActions.concat(action)).then(() => {});
+      return runEffect(effect, finalAction, originalActions.concat(action)).then(() => {});
     }
 
-    function runEffect(effect, originalActions = []) {
+    function runEffect(effect, finalAction, originalActions = []) {
       return effectToPromise(effect)
         .then((actions) => {
           const materializedActions = [].concat(actions).filter(a => a);
-          return Promise.all(materializedActions.map((action) => dispatch(action, originalActions)));
+          return Promise.all(materializedActions.map((action) => dispatch(action, null, originalActions)));
+        })
+        .then(() => {
+          finalAction && dispatch(finalAction);
         })
         .catch((error) => {
           const originalActionTypes = originalActions.map((action) => action.type);
@@ -70,7 +73,7 @@ export function install() {
       return store.replaceReducer(liftReducer(r));
     }
 
-    runEffect(liftedInitialState.effect, [{ type: "@@ReduxLoop/INIT" }]);
+    runEffect(liftedInitialState.effect, null, [{ type: "@@ReduxLoop/INIT" }]);
 
     return {
       ...store,
